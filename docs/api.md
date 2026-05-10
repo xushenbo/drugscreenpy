@@ -46,6 +46,7 @@
     tl.prepare_unique_drug_disease_pairs
     tl.rank_repurposing_hits
     tl.rank_safety_hits
+    tl.RateRatioResult
     tl.rate_ratio_test
     tl.resolve_grouping_column
     tl.resolve_overlapping_prescriptions

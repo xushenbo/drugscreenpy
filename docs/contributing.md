@@ -175,7 +175,9 @@ Consider enabling this option for [ruff][ruff-editors] and [biome][biome-editors
 ## Writing tests
 
 This package uses [pytest][] for automated testing.
-Please write {doc}`scanpy:dev/testing` for every function added to the package.
+Please write tests for every function added to the package. The
+[scanpy testing guide][] is a useful reference for scientific Python testing
+patterns.
 
 Most IDEs integrate with pytest and provide a GUI to run tests.
 Just point yours to one of the environments returned by
@@ -222,6 +224,7 @@ pytest
 in the root of the repository.
 
 [pytest]: https://docs.pytest.org/
+[scanpy testing guide]: https://scanpy.readthedocs.io/en/stable/dev/testing.html
 
 ### Continuous integration
 
@@ -272,7 +275,7 @@ This project uses [sphinx][] with the following features:
 - [sphinx-autodoc-typehints][], to automatically reference annotated input and output types
 - Citations (like {cite:p}`Virshup_2023`) can be included with [sphinxcontrib-bibtex](https://sphinxcontrib-bibtex.readthedocs.io/)
 
-See scanpy’s {doc}`scanpy:dev/documentation` for more information on how to write your own.
+See scanpy’s [documentation guide][] for more information on how to write your own.
 
 [sphinx]: https://www.sphinx-doc.org/en/master/
 [myst]: https://myst-parser.readthedocs.io/en/latest/intro.html
@@ -280,6 +283,7 @@ See scanpy’s {doc}`scanpy:dev/documentation` for more information on how to wr
 [numpydoc-napoleon]: https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html
 [numpydoc]: https://numpydoc.readthedocs.io/en/latest/format.html
 [sphinx-autodoc-typehints]: https://github.com/tox-dev/sphinx-autodoc-typehints
+[documentation guide]: https://scanpy.readthedocs.io/en/stable/dev/documentation.html
 
 ### Tutorials with myst-nb and jupyter notebooks
 
