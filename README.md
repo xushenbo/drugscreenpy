@@ -11,7 +11,7 @@ Self-controlled cohort drug-screening workflows for ehrapy.
 ## Getting started
 
 Please refer to the [documentation][],
-in particular, the [API documentation][].
+in particular, the [drug-screening tutorial][] and the [API documentation][].
 
 ## Installation
 
@@ -52,6 +52,7 @@ If you found a bug, please use the [issue tracker][].
 [issue tracker]: https://github.com/xushenbo/ehrapy-drug-screening/issues
 [tests]: https://github.com/xushenbo/ehrapy-drug-screening/actions/workflows/test.yaml
 [documentation]: https://ehrapy-drug-screening.readthedocs.io
+[drug-screening tutorial]: https://ehrapy-drug-screening.readthedocs.io/en/latest/drug_screening.html
 [changelog]: https://ehrapy-drug-screening.readthedocs.io/en/latest/changelog.html
 [api documentation]: https://ehrapy-drug-screening.readthedocs.io/en/latest/api.html
 [pypi]: https://pypi.org/project/ehrapy-drug-screening

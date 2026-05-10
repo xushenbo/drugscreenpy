@@ -23,9 +23,9 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-  "anndata",
-  # for debug logging (referenced from the issue template)
-  "session-info2",
+  "numpy",
+  "pandas",
+  "scipy",
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
 urls.Documentation = "https://ehrapy-drug-screening.readthedocs.io/"
@@ -133,10 +133,9 @@ skip = [
   ".git",
   "tests",
   "src/**/__init__.py",
-  "src/**/basic.py",
   "docs/api.md",
   "docs/changelog.md",
   "docs/references.bib",
   "docs/references.md",
-  "docs/notebooks/example.ipynb",
+  "docs/drug_screening.md",
 ]
