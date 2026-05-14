@@ -258,7 +258,7 @@ def _call_with_retries(
         try:
             response = llm_call(prompt)
             last_response = "" if response is None else str(response)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - user-provided LLM callables raise provider-specific errors.
             last_response = f"Error: {exc}"
         if _is_acceptable_response(last_response):
             return last_response

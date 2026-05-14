@@ -6,6 +6,8 @@ from collections.abc import Callable, Sequence
 import numpy as np
 import pandas as pd
 
+from drugscreenpy.tl._edata import get_patients, get_table, is_ehrdata, set_table
+
 _NUMBER_WORDS = {
     "zero": 0.0,
     "one": 1.0,
@@ -79,7 +81,8 @@ def compute_ndd_from_text(
         freq_fn: Summary rule for frequency ranges.
         interval_fn: Summary rule for interval ranges.
 
-    Returns:
+    Returns
+    -------
         The input table with parsed dosage columns appended: ``dose``, ``freq``,
         ``itvl``, ``ndd``, and ``optional``.
     """
@@ -143,6 +146,10 @@ def prepare_prescriptions_from_therapy(
     dose_fn: str | Callable[[Sequence[float]], float] = "mean",
     freq_fn: str | Callable[[Sequence[float]], float] = "mean",
     interval_fn: str | Callable[[Sequence[float]], float] = "mean",
+    therapy_key: str = "therapy",
+    dosage_lookup_key: str = "dosage_lookup",
+    min_max_lookup_key: str = "min_max_lookup",
+    prescriptions_key: str = "prescriptions",
 ) -> pd.DataFrame:
     """Normalize raw therapy-like records into prescription rows with durations.
 
@@ -189,13 +196,15 @@ def prepare_prescriptions_from_therapy(
         freq_fn: Summary rule for frequency ranges in free-text parsing.
         interval_fn: Summary rule for interval ranges in free-text parsing.
 
-    Returns:
+    Returns
+    -------
         A normalized prescription table with ``start_date``, ``duration``, and
         ``drug`` columns ready for cohort construction.
 
-    Examples:
+    Examples
+    --------
         >>> import pandas as pd
-        >>> import ehrapy_drug_screening as eds
+        >>> import drugscreenpy as eds
         >>> therapy = pd.DataFrame(
         ...     {
         ...         "patid": [1],
@@ -217,6 +226,44 @@ def prepare_prescriptions_from_therapy(
         >>> prescriptions.loc[0, "duration"]
         7.0
     """
+    if is_ehrdata(therapy):
+        edata = therapy
+        therapy_frame = get_table(edata, therapy_key)
+        patient_frame = get_patients(edata, patient_col=patient_col) if patients is None else patients
+        dosage_lookup_frame = (
+            dosage_lookup if dosage_lookup is not None else get_table(edata, dosage_lookup_key, required=False)
+        )
+        min_max_lookup_frame = (
+            min_max_lookup if min_max_lookup is not None else get_table(edata, min_max_lookup_key, required=False)
+        )
+        prescriptions = prepare_prescriptions_from_therapy(
+            therapy_frame,
+            patients=patient_frame,
+            dosage_lookup=dosage_lookup_frame,
+            min_max_lookup=min_max_lookup_frame,
+            drugprepr_decisions=drugprepr_decisions,
+            patient_col=patient_col,
+            practice_col=practice_col,
+            prodcode_col=prodcode_col,
+            event_date_col=event_date_col,
+            drug_col=drug_col,
+            dosage_id_col=dosage_id_col,
+            dosage_text_col=dosage_text_col,
+            qty_col=qty_col,
+            ndd_col=ndd_col,
+            duration_col=duration_col,
+            numdays_col=numdays_col,
+            dose_duration_col=dose_duration_col,
+            registration_start_col=registration_start_col,
+            observation_end_cols=observation_end_cols,
+            compute_ndd=compute_ndd,
+            dose_fn=dose_fn,
+            freq_fn=freq_fn,
+            interval_fn=interval_fn,
+        )
+        set_table(edata, prescriptions_key, prescriptions)
+        return prescriptions
+
     if therapy.empty:
         return therapy.copy()
 
@@ -311,10 +358,7 @@ def prepare_prescriptions_from_therapy(
 
         frame = frame.merge(patient_frame, how="left", on=patient_col)
         observation_end = frame.loc[:, list(observation_end_cols)].min(axis=1)
-        valid_mask = (
-            frame[registration_start_col].lt(frame[event_date_col])
-            & observation_end.gt(frame[event_date_col])
-        )
+        valid_mask = frame[registration_start_col].lt(frame[event_date_col]) & observation_end.gt(frame[event_date_col])
         frame = frame.loc[valid_mask].copy()
 
     frame["duration"] = infer_prescription_duration(
@@ -391,7 +435,8 @@ def prepare_prescriptions_with_drugprepr(
         freq_fn: Summary rule for frequency ranges in free-text parsing.
         interval_fn: Summary rule for interval ranges in free-text parsing.
 
-    Returns:
+    Returns
+    -------
         A prescription table with structured durations and stop dates after the
         ten-step preparation sequence.
     """
@@ -972,7 +1017,9 @@ def _apply_implausible_imputation(
     if method is None:
         raise NotImplementedError(f"Unsupported implausible-value decision: {decision}")
     group = _decision_group(decision, patient_col=patient_col, practice_col=practice_col)
-    return _impute_by_group(frame, values, mask, method=method, group=group, prodcode_col=prodcode_col, replace_with=np.nan)
+    return _impute_by_group(
+        frame, values, mask, method=method, group=group, prodcode_col=prodcode_col, replace_with=np.nan
+    )
 
 
 def _apply_missing_imputation(
@@ -1004,14 +1051,22 @@ def _apply_missing_duration_imputation(
     if decision == "a":
         return values
     if decision == "b":
-        return _impute_by_group(frame, values, values.isna(), method="mean", group=patient_col, prodcode_col=prodcode_col)
+        return _impute_by_group(
+            frame, values, values.isna(), method="mean", group=patient_col, prodcode_col=prodcode_col
+        )
     if decision == "c":
-        return _impute_by_group(frame, values, values.isna(), method="mean", group="population", prodcode_col=prodcode_col)
+        return _impute_by_group(
+            frame, values, values.isna(), method="mean", group="population", prodcode_col=prodcode_col
+        )
     if decision == "d":
-        individual = _impute_by_group(frame, values, values.isna(), method="mean", group=patient_col, prodcode_col=prodcode_col)
+        individual = _impute_by_group(
+            frame, values, values.isna(), method="mean", group=patient_col, prodcode_col=prodcode_col
+        )
         temp = frame.copy()
         temp[duration_col] = individual
-        return _impute_by_group(temp, individual, individual.isna(), method="mean", group="population", prodcode_col=prodcode_col)
+        return _impute_by_group(
+            temp, individual, individual.isna(), method="mean", group="population", prodcode_col=prodcode_col
+        )
     raise NotImplementedError(f"Unsupported missing-duration decision: {decision}")
 
 
@@ -1211,11 +1266,15 @@ def collapse_exposure_episodes(
             if start <= current_stop + pd.Timedelta(days=gap_days):
                 current_stop = max(current_stop, stop)
             else:
-                merged_rows.append(_merge_row_dict(merge_keys, key_values, start_col, current_start, stop_col, current_stop))
+                merged_rows.append(
+                    _merge_row_dict(merge_keys, key_values, start_col, current_start, stop_col, current_stop)
+                )
                 current_start, current_stop = start, stop
 
         if current_start is not None:
-            merged_rows.append(_merge_row_dict(merge_keys, key_values, start_col, current_start, stop_col, current_stop))
+            merged_rows.append(
+                _merge_row_dict(merge_keys, key_values, start_col, current_start, stop_col, current_stop)
+            )
 
     merged = pd.DataFrame(merged_rows)
     if keep_first_only and not merged.empty:
@@ -1230,7 +1289,7 @@ def collapse_exposure_episodes(
 
 def prepare_exposure_windows(
     exposures: pd.DataFrame,
-    patients: pd.DataFrame,
+    patients: pd.DataFrame | None = None,
     *,
     patient_col: str = "patid",
     start_col: str = "start_date",
@@ -1242,6 +1301,8 @@ def prepare_exposure_windows(
     group_cols: Sequence[str] = ("drug",),
     gap_days: int = 0,
     keep_first_only: bool = True,
+    exposures_key: str = "exposures",
+    exposure_windows_key: str = "exposure_windows",
 ) -> pd.DataFrame:
     """Prepare balanced exposed and unexposed windows for drug screening.
 
@@ -1254,6 +1315,30 @@ def prepare_exposure_windows(
         gap_days: Maximum gap that is still considered the same exposure episode.
         keep_first_only: Match the original workflow and keep the earliest merged episode per patient/group.
     """
+    if is_ehrdata(exposures):
+        edata = exposures
+        exposure_frame = get_table(edata, exposures_key)
+        patient_frame = get_patients(edata, patient_col=patient_col) if patients is None else patients
+        exposure_windows = prepare_exposure_windows(
+            exposure_frame,
+            patient_frame,
+            patient_col=patient_col,
+            start_col=start_col,
+            stop_col=stop_col,
+            birth_col=birth_col,
+            registration_start_col=registration_start_col,
+            observation_end_cols=observation_end_cols,
+            fixed_followup_days=fixed_followup_days,
+            group_cols=group_cols,
+            gap_days=gap_days,
+            keep_first_only=keep_first_only,
+        )
+        set_table(edata, exposure_windows_key, exposure_windows)
+        return exposure_windows
+
+    if patients is None:
+        raise TypeError("patients is required when using DataFrame inputs")
+
     collapsed = collapse_exposure_episodes(
         exposures,
         patient_col=patient_col,

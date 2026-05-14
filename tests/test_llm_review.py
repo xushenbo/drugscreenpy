@@ -1,13 +1,11 @@
 import pandas as pd
 
-import ehrapy_drug_screening as eds
+import drugscreenpy as eds
 
 
 class FakeLLM:
     def __init__(self, responses: dict[str, list[str] | str]):
-        self.responses = {
-            prompt: value if isinstance(value, list) else [value] for prompt, value in responses.items()
-        }
+        self.responses = {prompt: value if isinstance(value, list) else [value] for prompt, value in responses.items()}
         self.calls: list[str] = []
 
     def __call__(self, prompt: str) -> str:

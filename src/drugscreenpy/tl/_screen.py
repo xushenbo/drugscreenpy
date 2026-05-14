@@ -5,18 +5,19 @@ from collections.abc import Iterable, Sequence
 import numpy as np
 import pandas as pd
 
-from ehrapy_drug_screening.tl._exposure import (
+from drugscreenpy.tl._edata import get_patients, get_table, is_ehrdata, set_table, store_result
+from drugscreenpy.tl._exposure import (
     build_exposure_episodes_from_prescriptions,
     prepare_exposure_windows,
     prepare_prescriptions_from_therapy,
 )
-from ehrapy_drug_screening.tl._grouping import (
+from drugscreenpy.tl._grouping import (
     assign_grouping_labels,
     count_ever_users_by_group,
     group_known_pairs,
     validate_grouping_level,
 )
-from ehrapy_drug_screening.tl._self_controlled_cohort import rate_ratio_test
+from drugscreenpy.tl._self_controlled_cohort import rate_ratio_test
 
 DEFAULT_AGE_GROUPS: tuple[tuple[str, float, float] | tuple[str], ...] = (
     ("0-20", 0.0, 20.0),
@@ -36,8 +37,8 @@ SCREENING_WORKFLOW_FOLLOWUP_DAYS: dict[str, int | None] = {
 
 def screen_substance_cohort(
     prescriptions: pd.DataFrame,
-    patients: pd.DataFrame,
-    events: pd.DataFrame,
+    patients: pd.DataFrame | None = None,
+    events: pd.DataFrame | None = None,
     *,
     patient_col: str = "patid",
     drug_col: str = "drug",
@@ -55,6 +56,13 @@ def screen_substance_cohort(
     ever_user_count_col: str = "N.everuser",
     min_total_events: int = 100,
     age_groups: Sequence[tuple[str, float, float] | tuple[str]] = DEFAULT_AGE_GROUPS,
+    prescriptions_key: str = "prescriptions",
+    events_key: str = "events",
+    known_pairs_key: str = "known_drug_disease_pairs",
+    ever_user_counts_key: str = "ever_user_counts",
+    exposure_episodes_key: str = "exposure_episodes",
+    exposure_windows_key: str = "exposure_windows",
+    result_key: str = "screen_substance_cohort",
 ) -> pd.DataFrame:
     """Screen one prescription table end-to-end using the first substance-level port.
 
@@ -92,9 +100,71 @@ def screen_substance_cohort(
             drug-disease pair.
         age_groups: Age strata used during screening.
 
-    Returns:
+    Returns
+    -------
         A screening result table with incidence-rate ratios and event summaries.
     """
+    if is_ehrdata(prescriptions):
+        edata = prescriptions
+        prescription_frame = get_table(edata, prescriptions_key)
+        patient_frame = get_patients(edata, patient_col=patient_col) if patients is None else patients
+        event_frame = get_table(edata, events_key) if events is None else events
+        known_pairs = (
+            known_drug_disease_pairs
+            if known_drug_disease_pairs is not None
+            else get_table(edata, known_pairs_key, required=False)
+        )
+        ever_users = (
+            ever_user_counts if ever_user_counts is not None else get_table(edata, ever_user_counts_key, required=False)
+        )
+
+        fixed_followup_days = _resolve_screening_workflow(workflow, fixed_followup_days=fixed_followup_days)
+        episodes = build_exposure_episodes_from_prescriptions(
+            prescription_frame,
+            patient_col=patient_col,
+            start_col=prescription_start_col,
+            duration_col=duration_col,
+            group_cols=(drug_col,),
+            gap_days=gap_days,
+            keep_first_only=keep_first_only,
+        )
+        set_table(edata, exposure_episodes_key, episodes)
+        exposure_windows = prepare_exposure_windows(
+            episodes,
+            patient_frame,
+            patient_col=patient_col,
+            start_col=prescription_start_col,
+            stop_col="stop_date",
+            group_cols=(drug_col,),
+            fixed_followup_days=fixed_followup_days,
+            gap_days=0,
+            keep_first_only=keep_first_only,
+        )
+        set_table(edata, exposure_windows_key, exposure_windows)
+        result = screen_drugs(
+            exposure_windows,
+            event_frame,
+            patient_col=patient_col,
+            drug_col=drug_col,
+            disease_col=disease_col,
+            event_date_col=event_date_col,
+            start_col=prescription_start_col,
+            stop_col="stop_date",
+            unexposed_start_col="unexposed_start_date",
+            exposure_length_col="exposure_length",
+            age_col="prescription_age",
+            age_groups=age_groups,
+            min_total_events=min_total_events,
+            known_drug_disease_pairs=known_pairs,
+            ever_user_counts=ever_users,
+            ever_user_drug_col=ever_user_drug_col,
+            ever_user_count_col=ever_user_count_col,
+        )
+        return store_result(edata, result_key, result)
+
+    if patients is None or events is None:
+        raise TypeError("patients and events are required when using DataFrame inputs")
+
     fixed_followup_days = _resolve_screening_workflow(workflow, fixed_followup_days=fixed_followup_days)
     episodes = build_exposure_episodes_from_prescriptions(
         prescriptions,
@@ -139,8 +209,8 @@ def screen_substance_cohort(
 
 def screen_substance_therapy(
     therapy: pd.DataFrame,
-    patients: pd.DataFrame,
-    events: pd.DataFrame,
+    patients: pd.DataFrame | None = None,
+    events: pd.DataFrame | None = None,
     *,
     dosage_lookup: pd.DataFrame | None = None,
     min_max_lookup: pd.DataFrame | None = None,
@@ -160,6 +230,16 @@ def screen_substance_therapy(
     ever_user_count_col: str = "N.everuser",
     min_total_events: int = 100,
     age_groups: Sequence[tuple[str, float, float] | tuple[str]] = DEFAULT_AGE_GROUPS,
+    therapy_key: str = "therapy",
+    events_key: str = "events",
+    dosage_lookup_key: str = "dosage_lookup",
+    min_max_lookup_key: str = "min_max_lookup",
+    known_pairs_key: str = "known_drug_disease_pairs",
+    ever_user_counts_key: str = "ever_user_counts",
+    prescriptions_key: str = "prescriptions",
+    exposure_episodes_key: str = "exposure_episodes",
+    exposure_windows_key: str = "exposure_windows",
+    result_key: str = "screen_substance_therapy",
 ) -> pd.DataFrame:
     """Run the substance-level screen directly from raw therapy-like records.
 
@@ -200,12 +280,14 @@ def screen_substance_therapy(
             drug-disease pair.
         age_groups: Age strata used during screening.
 
-    Returns:
+    Returns
+    -------
         A drug-disease screening result table.
 
-    Examples:
+    Examples
+    --------
         >>> import pandas as pd
-        >>> import ehrapy_drug_screening as eds
+        >>> import drugscreenpy as eds
         >>> therapy = pd.DataFrame(
         ...     {
         ...         "patid": [1, 2],
@@ -235,6 +317,89 @@ def screen_substance_therapy(
         >>> "IRR" in result.columns
         True
     """
+    if is_ehrdata(therapy):
+        edata = therapy
+        therapy_frame = get_table(edata, therapy_key)
+        patient_frame = get_patients(edata, patient_col=patient_col) if patients is None else patients
+        event_frame = get_table(edata, events_key) if events is None else events
+        dosage_lookup_frame = (
+            dosage_lookup if dosage_lookup is not None else get_table(edata, dosage_lookup_key, required=False)
+        )
+        min_max_lookup_frame = (
+            min_max_lookup if min_max_lookup is not None else get_table(edata, min_max_lookup_key, required=False)
+        )
+        known_pairs = (
+            known_drug_disease_pairs
+            if known_drug_disease_pairs is not None
+            else get_table(edata, known_pairs_key, required=False)
+        )
+        ever_users = (
+            ever_user_counts if ever_user_counts is not None else get_table(edata, ever_user_counts_key, required=False)
+        )
+
+        prescriptions = prepare_prescriptions_from_therapy(
+            therapy_frame,
+            patients=patient_frame,
+            dosage_lookup=dosage_lookup_frame,
+            min_max_lookup=min_max_lookup_frame,
+            drugprepr_decisions=drugprepr_decisions,
+            patient_col=patient_col,
+            event_date_col=event_date_col,
+            drug_col=drug_col,
+        )
+        set_table(edata, prescriptions_key, prescriptions)
+        fixed_followup = _resolve_screening_workflow(workflow, fixed_followup_days=fixed_followup_days)
+        episodes = build_exposure_episodes_from_prescriptions(
+            prescriptions=prescriptions,
+            patient_col=patient_col,
+            start_col="start_date",
+            duration_col="duration",
+            group_cols=("drug",),
+            gap_days=gap_days,
+            keep_first_only=keep_first_only,
+        )
+        set_table(edata, exposure_episodes_key, episodes)
+        exposure_windows = prepare_exposure_windows(
+            episodes,
+            patient_frame,
+            patient_col=patient_col,
+            start_col="start_date",
+            stop_col="stop_date",
+            group_cols=("drug",),
+            fixed_followup_days=fixed_followup,
+            gap_days=0,
+            keep_first_only=keep_first_only,
+        )
+        set_table(edata, exposure_windows_key, exposure_windows)
+        normalized_events = (
+            event_frame.rename(columns={disease_event_date_col: "disease_eventdate"})
+            if disease_event_date_col != "disease_eventdate"
+            else event_frame
+        )
+        result = screen_drugs(
+            exposure_windows,
+            normalized_events,
+            patient_col=patient_col,
+            drug_col="drug",
+            disease_col=disease_col,
+            event_date_col="disease_eventdate",
+            start_col="start_date",
+            stop_col="stop_date",
+            unexposed_start_col="unexposed_start_date",
+            exposure_length_col="exposure_length",
+            age_col="prescription_age",
+            age_groups=age_groups,
+            min_total_events=min_total_events,
+            known_drug_disease_pairs=known_pairs,
+            ever_user_counts=ever_users,
+            ever_user_drug_col=ever_user_drug_col,
+            ever_user_count_col=ever_user_count_col,
+        )
+        return store_result(edata, result_key, result)
+
+    if patients is None or events is None:
+        raise TypeError("patients and events are required when using DataFrame inputs")
+
     prescriptions = prepare_prescriptions_from_therapy(
         therapy,
         patients=patients,
@@ -248,7 +413,9 @@ def screen_substance_therapy(
     return screen_substance_cohort(
         prescriptions,
         patients,
-        events.rename(columns={disease_event_date_col: "disease_eventdate"}) if disease_event_date_col != "disease_eventdate" else events,
+        events.rename(columns={disease_event_date_col: "disease_eventdate"})
+        if disease_event_date_col != "disease_eventdate"
+        else events,
         patient_col=patient_col,
         drug_col="drug",
         duration_col="duration",
@@ -270,8 +437,8 @@ def screen_substance_therapy(
 
 def screen_grouped_therapy(
     therapy: pd.DataFrame,
-    patients: pd.DataFrame,
-    events: pd.DataFrame,
+    patients: pd.DataFrame | None = None,
+    events: pd.DataFrame | None = None,
     *,
     level: str,
     grouping: pd.DataFrame | None = None,
@@ -296,6 +463,16 @@ def screen_grouped_therapy(
     ever_user_count_col: str = "N.everuser",
     min_total_events: int = 100,
     age_groups: Sequence[tuple[str, float, float] | tuple[str]] = DEFAULT_AGE_GROUPS,
+    therapy_key: str = "therapy",
+    events_key: str = "events",
+    grouping_key: str = "grouping",
+    dosage_lookup_key: str = "dosage_lookup",
+    min_max_lookup_key: str = "min_max_lookup",
+    known_pairs_key: str = "known_drug_disease_pairs",
+    ever_user_counts_key: str = "ever_user_counts",
+    prescriptions_key: str = "prescriptions",
+    grouped_prescriptions_key: str = "grouped_prescriptions",
+    result_key: str = "screen_grouped_therapy",
 ) -> pd.DataFrame:
     """Run the screening workflow at chapter, section, paragraph, or substance level.
 
@@ -348,9 +525,107 @@ def screen_grouped_therapy(
             drug-disease pair.
         age_groups: Age strata used during screening.
 
-    Returns:
+    Returns
+    -------
         A grouped drug-disease screening result table.
     """
+    if is_ehrdata(therapy):
+        edata = therapy
+        therapy_frame = get_table(edata, therapy_key)
+        patient_frame = get_patients(edata, patient_col=patient_col) if patients is None else patients
+        event_frame = get_table(edata, events_key) if events is None else events
+        grouping_frame = grouping if grouping is not None else get_table(edata, grouping_key, required=False)
+        dosage_lookup_frame = (
+            dosage_lookup if dosage_lookup is not None else get_table(edata, dosage_lookup_key, required=False)
+        )
+        min_max_lookup_frame = (
+            min_max_lookup if min_max_lookup is not None else get_table(edata, min_max_lookup_key, required=False)
+        )
+        known_pairs = (
+            known_drug_disease_pairs
+            if known_drug_disease_pairs is not None
+            else get_table(edata, known_pairs_key, required=False)
+        )
+        ever_users = (
+            ever_user_counts if ever_user_counts is not None else get_table(edata, ever_user_counts_key, required=False)
+        )
+        validated_level = validate_grouping_level(level)
+        prescriptions = prepare_prescriptions_from_therapy(
+            therapy_frame,
+            patients=patient_frame,
+            dosage_lookup=dosage_lookup_frame,
+            min_max_lookup=min_max_lookup_frame,
+            drugprepr_decisions=drugprepr_decisions,
+            patient_col=patient_col,
+            event_date_col=event_date_col,
+            drug_col=drug_col,
+        )
+        set_table(edata, prescriptions_key, prescriptions)
+        grouped_prescriptions = assign_grouping_labels(
+            prescriptions,
+            level=validated_level,
+            mapping=grouping_frame,
+            prodcode_col=prodcode_col,
+            grouping_col=grouping_col,
+            source_drug_col="drug",
+            output_col="drug",
+        )
+        set_table(edata, grouped_prescriptions_key, grouped_prescriptions)
+        if grouped_prescriptions.empty:
+            return store_result(edata, result_key, pd.DataFrame())
+
+        grouped_known_pairs = group_known_pairs(
+            known_pairs,
+            level=validated_level,
+            mapping=grouping_frame,
+            prodcode_col=prodcode_col,
+            disease_col=disease_col,
+            grouping_col=grouping_col,
+            output_col="drug",
+        )
+
+        if ever_users is None:
+            ever_users = count_ever_users_by_group(
+                grouped_prescriptions,
+                patient_col=patient_col,
+                drug_col="drug",
+                output_count_col=ever_user_count_col,
+            )
+            ever_user_drug_col = "drug"
+
+        normalized_events = (
+            event_frame.rename(columns={disease_event_date_col: "disease_eventdate"})
+            if disease_event_date_col != "disease_eventdate"
+            else event_frame
+        )
+        result = screen_substance_cohort(
+            grouped_prescriptions,
+            patient_frame,
+            normalized_events,
+            patient_col=patient_col,
+            drug_col="drug",
+            duration_col="duration",
+            prescription_start_col="start_date",
+            event_date_col="disease_eventdate",
+            disease_col=disease_col,
+            fixed_followup_days=fixed_followup_days,
+            workflow=workflow,
+            gap_days=gap_days,
+            keep_first_only=keep_first_only,
+            known_drug_disease_pairs=grouped_known_pairs,
+            ever_user_counts=ever_users,
+            ever_user_drug_col=ever_user_drug_col,
+            ever_user_count_col=ever_user_count_col,
+            min_total_events=min_total_events,
+            age_groups=age_groups,
+        )
+        if level_label_col is not None and not result.empty and level_label_col != "drug":
+            result[level_label_col] = result["drug"]
+        return store_result(edata, result_key, result)
+
+    if patients is None or events is None:
+        raise TypeError("patients and events are required when using DataFrame inputs")
+
     validated_level = validate_grouping_level(level)
     prescriptions = prepare_prescriptions_from_therapy(
         therapy,
@@ -472,7 +747,8 @@ def screen_drugs(
         ever_user_drug_col: Drug column in ``ever_user_counts``.
         ever_user_count_col: Count column in ``ever_user_counts``.
 
-    Returns:
+    Returns
+    -------
         A screening result table with incidence-rate ratios and event summaries.
     """
     if exposure_windows.empty or events.empty:
@@ -532,9 +808,9 @@ def screen_drugs(
                 unexposed_mask = disease_drug[event_date_col].between(
                     disease_drug[unexposed_start_col], disease_drug[start_col], inclusive="both"
                 )
-                exposed_mask = disease_drug[event_date_col].gt(disease_drug[start_col]) & disease_drug[event_date_col].le(
-                    disease_drug[stop_col]
-                )
+                exposed_mask = disease_drug[event_date_col].gt(disease_drug[start_col]) & disease_drug[
+                    event_date_col
+                ].le(disease_drug[stop_col])
 
                 irr = rate_ratio_test(
                     x=[int(exposed_mask.sum()), int(unexposed_mask.sum())],
@@ -585,7 +861,9 @@ def screen_drugs(
                             | disease_drug[event_date_col].gt(disease_drug[stop_col])
                         ).sum()
                     ),
-                    "N.disease.A.before.exposed": int(disease_drug[event_date_col].lt(disease_drug[unexposed_start_col]).sum()),
+                    "N.disease.A.before.exposed": int(
+                        disease_drug[event_date_col].lt(disease_drug[unexposed_start_col]).sum()
+                    ),
                     "N.disease.D.after.exposed": int(disease_drug[event_date_col].gt(disease_drug[stop_col]).sum()),
                 }
                 results.append(result)

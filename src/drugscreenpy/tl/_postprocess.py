@@ -23,7 +23,8 @@ def normalize_screening_result(
         drug_col: Optional source column to rename to ``drug``. If omitted and the
             table has no ``drug`` column, the first column is renamed.
 
-    Returns:
+    Returns
+    -------
         A copy of ``result`` with a normalized ``drug`` column and a ``drug.level``
         annotation column.
     """
@@ -55,7 +56,8 @@ def combine_screening_results(
         levels: Optional explicit concatenation order. If omitted, insertion order
             from ``results_by_level`` is used.
 
-    Returns:
+    Returns
+    -------
         One concatenated dataframe with a ``drug.level`` column.
     """
     ordered_levels = list(levels) if levels is not None else list(results_by_level)

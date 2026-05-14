@@ -3,8 +3,8 @@
 ## Tools
 
 ```{eval-rst}
-.. module:: ehrapy_drug_screening.tl
-.. currentmodule:: ehrapy_drug_screening
+.. module:: drugscreenpy.tl
+.. currentmodule:: drugscreenpy
 
 .. autosummary::
     :toctree: generated
@@ -32,8 +32,12 @@
     tl.extract_rxclass_may_treat
     tl.extract_rxnav_ingredient_links
     tl.extract_snomed_ingredient_links
+    tl.get_patients
+    tl.get_table
     tl.group_known_pairs
     tl.infer_prescription_duration
+    tl.list_results
+    tl.list_tables
     tl.normalize_binary_answer
     tl.normalize_readcodev2_medcode_map
     tl.normalize_readcodev3_to_v2_map
@@ -59,6 +63,8 @@
     tl.screen_grouped_therapy
     tl.screen_substance_cohort
     tl.screen_substance_therapy
+    tl.set_table
+    tl.store_result
     tl.summarize_drug_indications
     tl.validate_grouping_level
 ```

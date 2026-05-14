@@ -1,6 +1,6 @@
 import pandas as pd
 
-import ehrapy_drug_screening as eds
+import drugscreenpy as eds
 
 
 def test_combine_screening_results_normalizes_first_column_and_tags_levels():

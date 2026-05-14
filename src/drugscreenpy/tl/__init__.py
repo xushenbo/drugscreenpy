@@ -1,4 +1,5 @@
-from ehrapy_drug_screening.tl._exposure import (
+from drugscreenpy.tl._edata import get_patients, get_table, list_results, list_tables, set_table, store_result
+from drugscreenpy.tl._exposure import (
     apply_drugprepr_decisions,
     build_exposure_episodes_from_prescriptions,
     close_small_gaps_in_prescriptions,
@@ -11,14 +12,14 @@ from ehrapy_drug_screening.tl._exposure import (
     prepare_prescriptions_with_drugprepr,
     resolve_overlapping_prescriptions,
 )
-from ehrapy_drug_screening.tl._grouping import (
+from drugscreenpy.tl._grouping import (
     assign_grouping_labels,
     count_ever_users_by_group,
     group_known_pairs,
     resolve_grouping_column,
     validate_grouping_level,
 )
-from ehrapy_drug_screening.tl._indication_mapping import (
+from drugscreenpy.tl._indication_mapping import (
     build_bnfcode_prodcode_map,
     build_disease_indication_map,
     build_drug_indication_map,
@@ -37,7 +38,7 @@ from ehrapy_drug_screening.tl._indication_mapping import (
     normalize_readcodev3_to_v2_map,
     normalize_snomed_bnf_map,
 )
-from ehrapy_drug_screening.tl._llm_review import (
+from drugscreenpy.tl._llm_review import (
     build_aging_prompt,
     build_drug_indications_prompt,
     build_repurposing_indication_prompt,
@@ -54,19 +55,19 @@ from ehrapy_drug_screening.tl._llm_review import (
     review_safety_symptoms,
     summarize_drug_indications,
 )
-from ehrapy_drug_screening.tl._postprocess import (
+from drugscreenpy.tl._postprocess import (
     combine_screening_results,
     normalize_screening_result,
     rank_repurposing_hits,
     rank_safety_hits,
 )
-from ehrapy_drug_screening.tl._screen import (
+from drugscreenpy.tl._screen import (
     screen_drugs,
     screen_grouped_therapy,
     screen_substance_cohort,
     screen_substance_therapy,
 )
-from ehrapy_drug_screening.tl._self_controlled_cohort import RateRatioResult, rate_ratio_test
+from drugscreenpy.tl._self_controlled_cohort import RateRatioResult, rate_ratio_test
 
 __all__ = [
     "RateRatioResult",
@@ -94,7 +95,11 @@ __all__ = [
     "extract_rxnav_ingredient_links",
     "extract_snomed_ingredient_links",
     "group_known_pairs",
+    "get_patients",
+    "get_table",
     "infer_prescription_duration",
+    "list_results",
+    "list_tables",
     "build_aging_prompt",
     "build_drug_indications_prompt",
     "build_repurposing_indication_prompt",
@@ -126,5 +131,7 @@ __all__ = [
     "screen_substance_cohort",
     "screen_substance_therapy",
     "summarize_drug_indications",
+    "set_table",
+    "store_result",
     "validate_grouping_level",
 ]

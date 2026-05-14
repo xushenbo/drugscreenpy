@@ -1,7 +1,41 @@
+import ehrdata as ed
 import pandas as pd
 import pytest
 
-import ehrapy_drug_screening as eds
+import drugscreenpy as eds
+
+
+def _minimal_screening_tables():
+    therapy = pd.DataFrame(
+        {
+            "patid": [1, 2, 3],
+            "eventdate": ["2020-01-10", "2020-01-10", "2020-01-10"],
+            "drugsubstance": ["drug_a", "drug_a", "drug_a"],
+            "duration": [5, 5, 5],
+        }
+    )
+    patients = pd.DataFrame(
+        {
+            "patid": [1, 2, 3],
+            "dob": ["1970-01-01", "1970-01-01", "1970-01-01"],
+            "frd": ["2019-01-01", "2019-01-01", "2019-01-01"],
+            "tod": ["2021-01-01", "2021-01-01", "2021-01-01"],
+            "lcd": ["2021-01-01", "2021-01-01", "2021-01-01"],
+            "deathdate": ["2021-01-01", "2021-01-01", "2021-01-01"],
+        }
+    )
+    events = pd.DataFrame(
+        {
+            "patid": [1, 2, 3],
+            "disease": ["disease_x", "disease_x", "disease_x"],
+            "disease_eventdate": pd.to_datetime(["2020-01-12", "2020-01-06", "2020-01-13"]),
+        }
+    )
+    return therapy, patients, events
+
+
+def _edata_from_patients(patients: pd.DataFrame) -> ed.EHRData:
+    return ed.EHRData(obs=patients.set_index("patid"))
 
 
 def test_compute_ndd_from_text_parses_common_prescription_patterns():
@@ -46,13 +80,7 @@ def test_compute_ndd_from_text_handles_ranges_abbreviations_and_non_daily_interv
 
 
 def test_compute_ndd_from_text_matches_drugprepr_example_patterns():
-    dosage = pd.DataFrame(
-        {
-            "text": ["TAKE 1 OR 2 4 TIMES/DAY"] * 6
-            + ["TAKE 1-2 THREE TIMES A DAY"] * 8
-            + [""] * 4
-        }
-    )
+    dosage = pd.DataFrame({"text": ["TAKE 1 OR 2 4 TIMES/DAY"] * 6 + ["TAKE 1-2 THREE TIMES A DAY"] * 8 + [""] * 4})
 
     parsed_min = eds.tl.compute_ndd_from_text(dosage, dose_fn="min", freq_fn="min", interval_fn="mean")
     parsed_min_max = eds.tl.compute_ndd_from_text(dosage, dose_fn="min", freq_fn="max", interval_fn="mean")
@@ -327,7 +355,9 @@ def test_screen_drugs_skips_known_pairs():
             "deathdate": ["2021-01-01", "2021-01-01"],
         }
     )
-    exposure_windows = eds.tl.prepare_exposure_windows(eds.tl.build_exposure_episodes_from_prescriptions(prescriptions), patients)
+    exposure_windows = eds.tl.prepare_exposure_windows(
+        eds.tl.build_exposure_episodes_from_prescriptions(prescriptions), patients
+    )
     events = pd.DataFrame(
         {
             "patid": [1, 2],
@@ -406,6 +436,66 @@ def test_screen_substance_therapy_runs_from_raw_therapy_records():
 
     assert len(result) == 2
     assert set(result["age.group"]) == {"40-60", "all"}
+
+
+def test_edata_table_helpers_store_tables_and_reconstruct_patient_column():
+    _, patients, _ = _minimal_screening_tables()
+    edata = _edata_from_patients(patients)
+    therapy = pd.DataFrame({"patid": [1], "eventdate": ["2020-01-10"], "drugsubstance": ["drug_a"], "duration": [5]})
+
+    eds.tl.set_table(edata, "therapy", therapy)
+    fetched = eds.tl.get_table(edata, "therapy", required_columns=["patid", "eventdate"])
+    fetched.loc[0, "duration"] = 99
+    patient_table = eds.tl.get_patients(edata)
+
+    assert eds.tl.list_tables(edata) == ["therapy"]
+    assert edata.uns["drugscreenpy"]["tables"]["therapy"].loc[0, "duration"] == 5
+    assert list(patient_table["patid"]) == [1, 2, 3]
+    with pytest.raises(KeyError, match="No drugscreenpy table named 'events'"):
+        eds.tl.get_table(edata, "events")
+
+
+def test_screen_substance_therapy_accepts_edata_and_stores_results():
+    therapy, patients, events = _minimal_screening_tables()
+    expected = eds.tl.screen_substance_therapy(therapy, patients, events, min_total_events=2)
+    edata = _edata_from_patients(patients)
+    eds.tl.set_table(edata, "therapy", therapy)
+    eds.tl.set_table(edata, "events", events)
+
+    result = eds.tl.screen_substance_therapy(edata, min_total_events=2)
+
+    pd.testing.assert_frame_equal(result, expected)
+    pd.testing.assert_frame_equal(edata.uns["drugscreenpy"]["results"]["screen_substance_therapy"], expected)
+    assert {"prescriptions", "exposure_episodes", "exposure_windows", "therapy", "events"}.issubset(
+        eds.tl.list_tables(edata)
+    )
+
+
+def test_screen_substance_cohort_accepts_edata_and_stores_results():
+    therapy, patients, events = _minimal_screening_tables()
+    prescriptions = eds.tl.prepare_prescriptions_from_therapy(therapy, patients=patients)
+    expected = eds.tl.screen_substance_cohort(prescriptions, patients, events, min_total_events=2)
+    edata = _edata_from_patients(patients)
+    eds.tl.set_table(edata, "prescriptions", prescriptions)
+    eds.tl.set_table(edata, "events", events)
+
+    result = eds.tl.screen_substance_cohort(edata, min_total_events=2)
+
+    pd.testing.assert_frame_equal(result, expected)
+    pd.testing.assert_frame_equal(edata.uns["drugscreenpy"]["results"]["screen_substance_cohort"], expected)
+
+
+def test_prepare_helpers_accept_edata_and_store_intermediate_tables():
+    therapy, patients, _ = _minimal_screening_tables()
+    edata = _edata_from_patients(patients)
+    eds.tl.set_table(edata, "therapy", therapy)
+
+    prescriptions = eds.tl.prepare_prescriptions_from_therapy(edata)
+    eds.tl.set_table(edata, "exposures", eds.tl.build_exposure_episodes_from_prescriptions(prescriptions))
+    exposure_windows = eds.tl.prepare_exposure_windows(edata)
+
+    pd.testing.assert_frame_equal(edata.uns["drugscreenpy"]["tables"]["prescriptions"], prescriptions)
+    pd.testing.assert_frame_equal(edata.uns["drugscreenpy"]["tables"]["exposure_windows"], exposure_windows)
 
 
 def test_screen_substance_therapy_supports_named_followup_workflows():
@@ -946,6 +1036,59 @@ def test_screen_grouped_therapy_runs_chapter_level_workflow():
     assert set(result[result["drug"] == "chapter_2"]["N.everuser"]) == {1}
 
 
+def test_screen_grouped_therapy_accepts_edata_and_stores_grouped_prescriptions():
+    therapy = pd.DataFrame(
+        {
+            "patid": [1, 2, 3],
+            "prodcode": [10, 11, 20],
+            "eventdate": ["2020-01-10", "2020-01-10", "2020-01-10"],
+            "drugsubstance": ["drug_a", "drug_b", "drug_c"],
+            "duration": [5, 5, 5],
+        }
+    )
+    grouping = pd.DataFrame(
+        {
+            "prodcode": [10, 11, 20],
+            "bnf.chapter": ["chapter_1", "chapter_1", "chapter_2"],
+        }
+    )
+    patients = pd.DataFrame(
+        {
+            "patid": [1, 2, 3],
+            "dob": ["1970-01-01", "1970-01-01", "1970-01-01"],
+            "frd": ["2019-01-01", "2019-01-01", "2019-01-01"],
+            "tod": ["2021-01-01", "2021-01-01", "2021-01-01"],
+            "lcd": ["2021-01-01", "2021-01-01", "2021-01-01"],
+            "deathdate": ["2021-01-01", "2021-01-01", "2021-01-01"],
+        }
+    )
+    events = pd.DataFrame(
+        {
+            "patid": [1, 2, 3, 3],
+            "disease": ["disease_x", "disease_x", "disease_x", "disease_y"],
+            "disease_eventdate": pd.to_datetime(["2020-01-12", "2020-01-06", "2020-01-13", "2020-01-12"]),
+        }
+    )
+    expected = eds.tl.screen_grouped_therapy(
+        therapy,
+        patients,
+        events,
+        level="chapter",
+        grouping=grouping,
+        min_total_events=1,
+    )
+    edata = _edata_from_patients(patients)
+    eds.tl.set_table(edata, "therapy", therapy)
+    eds.tl.set_table(edata, "events", events)
+    eds.tl.set_table(edata, "grouping", grouping)
+
+    result = eds.tl.screen_grouped_therapy(edata, level="chapter", min_total_events=1)
+
+    pd.testing.assert_frame_equal(result, expected)
+    assert "grouped_prescriptions" in eds.tl.list_tables(edata)
+    pd.testing.assert_frame_equal(edata.uns["drugscreenpy"]["results"]["screen_grouped_therapy"], expected)
+
+
 def test_screen_grouped_therapy_supports_named_followup_workflows():
     therapy = pd.DataFrame(
         {
@@ -990,7 +1133,9 @@ def test_screen_grouped_therapy_supports_named_followup_workflows():
         min_total_events=1,
     )
 
-    chapter_one = result[(result["drug"] == "chapter_1") & (result["disease"] == "disease_x") & (result["age.group"] == "all")].iloc[0]
+    chapter_one = result[
+        (result["drug"] == "chapter_1") & (result["disease"] == "disease_x") & (result["age.group"] == "all")
+    ].iloc[0]
     assert chapter_one["sum.exposed.person.time"] == 730
 
 

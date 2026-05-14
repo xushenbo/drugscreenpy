@@ -3,9 +3,9 @@ build-backend = "hatchling.build"
 requires = [ "hatchling" ]
 
 [project]
-name = "ehrapy-drug-screening"
+name = "drugscreenpy"
 version = "0.0.1"
-description = "Self-controlled cohort drug-screening workflows for ehrapy."
+description = "Self-controlled cohort drug-screening workflows for electronic health record data."
 readme = "README.md"
 license = { file = "LICENSE" }
 maintainers = [
@@ -23,6 +23,7 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
+  "ehrdata",
   "numpy",
   "pandas",
   "scipy",
@@ -50,9 +51,9 @@ optional-dependencies.test = [
   "pytest",
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
-urls.Documentation = "https://ehrapy-drug-screening.readthedocs.io/"
-urls.Homepage = "https://github.com/xushenbo/ehrapy-drug-screening"
-urls.Source = "https://github.com/xushenbo/ehrapy-drug-screening"
+urls.Documentation = "https://drugscreenpy.readthedocs.io/"
+urls.Homepage = "https://github.com/xushenbo/drugscreenpy"
+urls.Source = "https://github.com/xushenbo/drugscreenpy"
 
 [dependency-groups]
 dev = [
@@ -148,7 +149,7 @@ run.omit = [
   "**/test_*.py",
 ]
 run.patch = [ "subprocess" ]
-run.source = [ "ehrapy_drug_screening" ]
+run.source = [ "drugscreenpy" ]
 
 [tool.cruft]
 skip = [

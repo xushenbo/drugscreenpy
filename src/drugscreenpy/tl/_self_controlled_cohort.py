@@ -35,7 +35,8 @@ def rate_ratio_test(
         alternative: Alternative hypothesis.
         conf_level: Confidence level for the interval estimate.
 
-    Returns:
+    Returns
+    -------
         A dataclass containing the point estimate, confidence interval, and p-value.
     """
     if len(x) != 2 or len(n) != 2:

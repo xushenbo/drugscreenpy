@@ -2,8 +2,8 @@ import math
 
 import pytest
 
-import ehrapy_drug_screening as eds
-from ehrapy_drug_screening.tl import RateRatioResult
+import drugscreenpy as eds
+from drugscreenpy.tl import RateRatioResult
 
 
 def test_rate_ratio_test_balanced_case():

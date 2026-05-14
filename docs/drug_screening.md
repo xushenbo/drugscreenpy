@@ -1,8 +1,8 @@
 # Drug Screening
 
 This tutorial shows the current substance-level drug-screening workflow in
-`ehrapy-drug-screening`. The API ports the first end-to-end slice from the
-`original/` research code into `ehrapy_drug_screening.tl`.
+`drugscreenpy`. The API ports the first end-to-end slice from the
+`original/` research code into `drugscreenpy.tl`.
 
 ## What the current port covers
 
@@ -21,11 +21,12 @@ prefer precomputed structured dosage fields.
 The screening wrappers also expose the three workflow variants used in
 `original/`: `workflow="actual"`, `workflow="30days"`, and `workflow="365days"`.
 
-## Minimal workflow
+## EHRData-first workflow
 
 ```python
+import ehrdata as ed
 import pandas as pd
-import ehrapy_drug_screening as eds
+import drugscreenpy as eds
 
 therapy = pd.DataFrame(
     {
@@ -55,6 +56,33 @@ events = pd.DataFrame(
     }
 )
 
+edata = ed.EHRData(obs=patients.set_index("patid"))
+eds.tl.set_table(edata, "therapy", therapy)
+eds.tl.set_table(edata, "events", events)
+
+result = eds.tl.screen_substance_therapy(
+    edata,
+    workflow="actual",
+    min_total_events=2,
+)
+
+result[["drug", "disease", "age.group", "IRR", "p.value"]]
+```
+
+`EHRData` is the recommended workflow object. `drugscreenpy` uses `edata.obs`
+as the patient or cohort table. Relational drug-screening inputs stay in
+`edata.uns["drugscreenpy"]["tables"]`, and output tables are stored in
+`edata.uns["drugscreenpy"]["results"]`.
+
+The matrix slots `.X`, `.layers`, `.var`, and `.tem` are not used for raw
+therapy, event, or indication tables because those tables are not aligned
+feature matrices.
+
+## Standalone DataFrame workflow
+
+The same workflow can also be run directly on pandas DataFrames:
+
+```python
 result = eds.tl.screen_substance_therapy(
     therapy,
     patients,
@@ -64,6 +92,24 @@ result = eds.tl.screen_substance_therapy(
 )
 
 result[["drug", "disease", "age.group", "IRR", "p.value"]]
+```
+
+## OMOP-derived EHRData
+
+If `edata` was created with `ehrdata.io.omop.setup_obs(...)`, use the patient
+identifier available in `.obs`, for example `patient_col="person_id"`:
+
+```python
+eds.tl.set_table(edata, "therapy", therapy)
+eds.tl.set_table(edata, "events", events)
+
+result = eds.tl.screen_substance_therapy(
+    edata,
+    patient_col="person_id",
+    therapy_key="therapy",
+    events_key="events",
+    min_total_events=2,
+)
 ```
 
 ## Matching the original workflow variants
@@ -137,9 +183,9 @@ The grouped result table always includes the canonical `drug` column. Set
 
 ## When to use the lower-level functions
 
-Use {func}`ehrapy_drug_screening.tl.compute_ndd_from_text` when you want to
+Use {func}`drugscreenpy.tl.compute_ndd_from_text` when you want to
 inspect parsed dosage text directly. Use
-{func}`ehrapy_drug_screening.tl.prepare_prescriptions_from_therapy` when you want
+{func}`drugscreenpy.tl.prepare_prescriptions_from_therapy` when you want
 to inspect or customize prescription preparation before screening. Use
 `eds.tl.screen_substance_cohort` when your prescription table already has
 `start_date` and `duration`.

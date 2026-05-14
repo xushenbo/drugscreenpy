@@ -1,5 +1,5 @@
 name: Feature request
-description: Propose a new feature for ehrapy-drug-screening
+description: Propose a new feature for drugscreenpy
 type: Enhancement
 body:
   - type: textarea
