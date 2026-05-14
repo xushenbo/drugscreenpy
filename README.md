@@ -45,7 +45,17 @@ If you found a bug, please use the [issue tracker][].
 
 ## Citation
 
-> t.b.a
+If you use `drugscreenpy`, please cite the drug-screening workflow:
+
+```bibtex
+@inproceedings{xu2024foundational,
+  title={Foundational Model-aided Automatic High-throughput Drug Screening Using Self-controlled Cohort Study},
+  author={Shenbo Xu and Raluca Cobzaru and Stan Finkelstein and Roy Welsch and Kenney Ng},
+  booktitle={NeurIPS 2024 Workshop on AI for New Drug Modalities},
+  year={2024},
+  url={https://openreview.net/forum?id=30EakJqzF0}
+}
+```
 
 [uv]: https://github.com/astral-sh/uv
 [scverse discourse]: https://discourse.scverse.org/
